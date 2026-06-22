@@ -1,7 +1,448 @@
-<Solution>
-  <Configurations>
-    <Platform Name="x64" />
-    <Platform Name="x86" />
-  </Configurations>
-  <Project Path="ConsoleApplication1/ConsoleApplication1.vcxproj" Id="838d954a-270f-4652-be84-0d3d3fe50865" />
-</Solution>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+using namespace std;
+
+// ==================== СТРУКТУРИ ====================
+
+struct Address {
+    string city;
+    string street;
+
+    string toString() const {
+        return "Місто: " + city + ", Вулиця: " + street;
+    }
+};
+
+struct User {
+    string username;
+    string password;
+    string phone;
+    bool isBroker;
+
+    string toString() const {
+        return "Користувач: " + username + ", Телефон: " + phone +
+            (isBroker ? " (брокер)" : " (звичайний користувач)");
+    }
+};
+
+struct Property {
+    Address address;
+    int rooms;
+    double price;
+    int type;         // 1 - квартира, 2 - пентхаус, 3 - приватний будинок
+    bool forSale;     // true - продаж, false - оренда
+    int buildingNumber;
+    int floor;        // актуально для типів 1 і 2
+    User owner;
+
+    string typeName() const {
+        if (type == 1) return "звичайна квартира";
+        if (type == 2) return "квартира-пентхаус";
+        return "приватний будинок";
+    }
+
+    string toString() const {
+        string result = "";
+        result += (forSale ? "Продається " : "Здається в оренду ") + typeName() + ":\n";
+        result += to_string(rooms) + " кімнати(кімнат)";
+        if (type == 1 || type == 2) {
+            result += ", поверх " + to_string(floor);
+        }
+        result += ".\n";
+        result += "Адреса: " + address.city + ", вул. " + address.street +
+            ", буд. " + to_string(buildingNumber) + "\n";
+        result += "Ціна: " + to_string((int)price) + " грн.\n";
+        result += "Контактна інформація: " + owner.username + ", " + owner.phone +
+            (owner.isBroker ? " (брокер)." : " (звичайний користувач).");
+        return result;
+    }
+};
+
+// ==================== ГЛОБАЛЬНІ ДАНІ ====================
+
+vector<Address> addresses;
+vector<User>    users;
+vector<Property> properties;
+
+// ==================== ВАЛІДАЦІЯ ====================
+
+bool isStrongPassword(const string& pwd) {
+    bool hasDigit = false;
+    bool hasSpecial = false;
+    for (char c : pwd) {
+        if (isdigit(c)) hasDigit = true;
+        if (c == '$' || c == '%' || c == '_') hasSpecial = true;
+    }
+    return hasDigit && hasSpecial;
+}
+
+bool isValidPhone(const string& phone) {
+    if (phone.length() != 10) return false;
+    for (char c : phone)
+        if (!isdigit(c)) return false;
+    string prefix2 = phone.substr(0, 2);
+    return prefix2 == "05" || prefix2 == "06" || prefix2 == "07" || prefix2 == "09";
+}
+
+// ==================== ІНІЦІАЛІЗАЦІЯ АДРЕС ====================
+
+void initAddresses() {
+    addresses = {
+        {"Київ",    "Шевченка"},
+        {"Київ",    "Хрещатик"},
+        {"Київ",    "Лесі Українки"},
+        {"Львів",   "Франка"},
+        {"Львів",   "Городоцька"},
+        {"Львів",   "Стрийська"},
+        {"Дніпро",  "Соборна"},
+        {"Дніпро",  "Героїв"},
+        {"Харків",  "Сумська"},
+        {"Харків",  "Пушкінська"}
+    };
+}
+
+// ==================== ФУНКЦІЇ МЕНЮ ====================
+
+void printAllProperties();
+
+// --- Друк об'єктів конкретного користувача ---
+void printUserProperties(const User& user) {
+    bool found = false;
+    int idx = 1;
+    for (const auto& p : properties) {
+        if (p.owner.username == user.username) {
+            cout << "[" << idx++ << "]\n" << p.toString() << "\n\n";
+            found = true;
+        }
+    }
+    if (!found)
+        cout << "Ви ще не розміщували оголошень.\n";
+}
+
+// --- Реєстрація ---
+void createUser() {
+    User newUser;
+
+    // Ім'я користувача
+    while (true) {
+        cout << "Введіть ім'я користувача: ";
+        cin >> newUser.username;
+        bool taken = false;
+        for (const auto& u : users)
+            if (u.username == newUser.username) { taken = true; break; }
+        if (!taken) break;
+        cout << "Це ім'я вже зайняте. Спробуйте інше.\n";
+    }
+
+    // Пароль
+    while (true) {
+        cout << "Введіть пароль (має містити цифру та символ $, % або _): ";
+        cin >> newUser.password;
+        if (isStrongPassword(newUser.password)) break;
+        cout << "Пароль не відповідає вимогам. Спробуйте ще раз.\n";
+    }
+
+    // Телефон
+    while (true) {
+        cout << "Введіть номер телефону (10 цифр, починається з 05/06/07/09): ";
+        cin >> newUser.phone;
+        if (isValidPhone(newUser.phone)) break;
+        cout << "Некоректний номер. Спробуйте ще раз.\n";
+    }
+
+    // Брокер чи ні
+    char choice;
+    cout << "Ви брокер? (y/n): ";
+    cin >> choice;
+    newUser.isBroker = (choice == 'y' || choice == 'Y');
+
+    users.push_back(newUser);
+    cout << "Обліковий запис успішно створено!\n";
+}
+
+// --- Вхід ---
+User* userLogin() {
+    string uname, pwd;
+    cout << "Ім'я користувача: ";
+    cin >> uname;
+    cout << "Пароль: ";
+    cin >> pwd;
+    for (auto& u : users) {
+        if (u.username == uname && u.password == pwd)
+            return &u;
+    }
+    return nullptr;
+}
+
+// --- Розмістити нерухомість ---
+bool postNewProperty(User& user) {
+    // Перевірка ліміту
+    int count = 0;
+    for (const auto& p : properties)
+        if (p.owner.username == user.username) count++;
+
+    int limit = user.isBroker ? 10 : 3;
+    if (count >= limit) {
+        cout << "Ви досягли максимальної кількості оголошень (" << limit << ").\n";
+        return false;
+    }
+
+    // Унікальні міста
+    vector<string> cities;
+    for (const auto& a : addresses) {
+        bool found = false;
+        for (const auto& c : cities)
+            if (c == a.city) { found = true; break; }
+        if (!found) cities.push_back(a.city);
+    }
+
+    cout << "\nДоступні міста:\n";
+    for (int i = 0; i < (int)cities.size(); i++)
+        cout << i + 1 << " – " << cities[i] << "\n";
+
+    int cityIdx;
+    cout << "Оберіть місто (номер): ";
+    cin >> cityIdx;
+    if (cityIdx < 1 || cityIdx >(int)cities.size()) {
+        cout << "Невірний вибір.\n";
+        return false;
+    }
+    string selectedCity = cities[cityIdx - 1];
+
+    // Вулиці обраного міста
+    vector<string> streets;
+    for (const auto& a : addresses)
+        if (a.city == selectedCity)
+            streets.push_back(a.street);
+
+    cout << "\nВулиці у місті " << selectedCity << ":\n";
+    for (const auto& s : streets)
+        cout << " – " << s << "\n";
+
+    string selectedStreet;
+    cout << "Введіть назву вулиці: ";
+    cin >> selectedStreet;
+
+    // Перевірка вулиці
+    Address* selectedAddr = nullptr;
+    for (auto& a : addresses)
+        if (a.city == selectedCity && a.street == selectedStreet) {
+            selectedAddr = &a; break;
+        }
+    if (!selectedAddr) {
+        cout << "Такої вулиці немає у списку.\n";
+        return false;
+    }
+
+    // Тип нерухомості
+    cout << "\nТип нерухомості:\n1 – Звичайна квартира\n2 – Пентхаус\n3 – Приватний будинок\n";
+    int propType;
+    cout << "Ваш вибір: ";
+    cin >> propType;
+    if (propType < 1 || propType > 3) {
+        cout << "Невірний тип.\n";
+        return false;
+    }
+
+    Property prop;
+    prop.address = *selectedAddr;
+    prop.owner = user;
+    prop.type = propType;
+
+    // Поверх (тільки для квартир)
+    if (propType == 1 || propType == 2) {
+        cout << "Номер поверху: ";
+        cin >> prop.floor;
+    }
+    else {
+        prop.floor = 0;
+    }
+
+    cout << "Кількість кімнат: ";
+    cin >> prop.rooms;
+    cout << "Номер будинку: ";
+    cin >> prop.buildingNumber;
+
+    char saleChoice;
+    cout << "Продаж (s) чи оренда (r)? ";
+    cin >> saleChoice;
+    prop.forSale = (saleChoice == 's' || saleChoice == 'S');
+
+    cout << "Ціна (грн): ";
+    cin >> prop.price;
+
+    properties.push_back(prop);
+    cout << "Оголошення успішно розміщено!\n";
+    return true;
+}
+
+// --- Видалити нерухомість ---
+void removeProperty(User& user) {
+    vector<int> myIndices;
+    for (int i = 0; i < (int)properties.size(); i++)
+        if (properties[i].owner.username == user.username)
+            myIndices.push_back(i);
+
+    if (myIndices.empty()) {
+        cout << "Ви ще не розміщували оголошень.\n";
+        return;
+    }
+
+    cout << "\nВаші оголошення:\n";
+    for (int i = 0; i < (int)myIndices.size(); i++) {
+        cout << "[" << i + 1 << "]\n" << properties[myIndices[i]].toString() << "\n\n";
+    }
+
+    int choice;
+    cout << "Введіть номер оголошення для видалення: ";
+    cin >> choice;
+    if (choice < 1 || choice >(int)myIndices.size()) {
+        cout << "Невірний вибір.\n";
+        return;
+    }
+
+    properties.erase(properties.begin() + myIndices[choice - 1]);
+    cout << "Оголошення успішно видалено!\n";
+}
+
+// --- Вивести всі об'єкти ---
+void printAllProperties() {
+    if (properties.empty()) {
+        cout << "Список нерухомості порожній.\n";
+        return;
+    }
+    cout << "\n=== Всі об'єкти нерухомості ===\n";
+    for (int i = 0; i < (int)properties.size(); i++) {
+        cout << "[" << i + 1 << "]\n" << properties[i].toString() << "\n\n";
+    }
+}
+
+// --- Пошук ---
+void search() {
+    cout << "\n=== Пошук нерухомості ===\n";
+    cout << "(Введіть 999, щоб ігнорувати критерій)\n";
+
+    int saleFilter;
+    cout << "Продаж (1) чи оренда (2)? ";
+    cin >> saleFilter;
+
+    int typeFilter;
+    cout << "Тип нерухомості (1-квартира, 2-пентхаус, 3-будинок)? ";
+    cin >> typeFilter;
+
+    int roomsFilter;
+    cout << "Кількість кімнат? ";
+    cin >> roomsFilter;
+
+    double minPrice, maxPrice;
+    cout << "Мінімальна ціна (або 999 для ігнорування): ";
+    cin >> minPrice;
+    cout << "Максимальна ціна (або 999 для ігнорування): ";
+    cin >> maxPrice;
+
+    vector<Property> results;
+    for (const auto& p : properties) {
+        if (saleFilter != 999) {
+            bool wantSale = (saleFilter == 1);
+            if (p.forSale != wantSale) continue;
+        }
+        if (typeFilter != 999 && p.type != typeFilter) continue;
+        if (roomsFilter != 999 && p.rooms != roomsFilter) continue;
+        if (minPrice != 999 && p.price < minPrice) continue;
+        if (maxPrice != 999 && p.price > maxPrice) continue;
+        results.push_back(p);
+    }
+
+    if (results.empty()) {
+        cout << "Нічого не знайдено за вашими критеріями.\n";
+        return;
+    }
+
+    cout << "\n=== Результати пошуку (" << results.size() << ") ===\n";
+    for (int i = 0; i < (int)results.size(); i++) {
+        cout << "[" << i + 1 << "]\n" << results[i].toString() << "\n\n";
+    }
+}
+
+// ==================== ВНУТРІШНЄ МЕНЮ ====================
+
+void innerMenu(User& user) {
+    while (true) {
+        cout << "\n=== Меню користувача (" << user.username << ") ===\n";
+        cout << "1 – Розмістити новий об'єкт нерухомості\n";
+        cout << "2 – Видалити оголошення\n";
+        cout << "3 – Переглянути всі об'єкти\n";
+        cout << "4 – Переглянути мої об'єкти\n";
+        cout << "5 – Пошук нерухомості\n";
+        cout << "6 – Вийти до головного меню\n";
+        cout << "Ваш вибір: ";
+
+        int choice;
+        cin >> choice;
+
+        switch (choice) {
+        case 1: postNewProperty(user); break;
+        case 2: removeProperty(user); break;
+        case 3: printAllProperties(); break;
+        case 4:
+            cout << "\n=== Мої оголошення ===\n";
+            printUserProperties(user);
+            break;
+        case 5: search(); break;
+        case 6: return;
+        default: cout << "Невірний вибір.\n";
+        }
+    }
+}
+
+// ==================== ГОЛОВНЕ МЕНЮ ====================
+
+void mainMenu() {
+    while (true) {
+        cout << "\n=== Дошка оголошень про нерухомість ===\n";
+        cout << "1 – Створити обліковий запис\n";
+        cout << "2 – Увійти до існуючого облікового запису\n";
+        cout << "3 – Завершити програму\n";
+        cout << "Ваш вибір: ";
+
+        int choice;
+        cin >> choice;
+
+        if (choice == 1) {
+            createUser();
+        }
+        else if (choice == 2) {
+            User* logged = userLogin();
+            if (!logged) {
+                cout << "Невірне ім'я користувача або пароль.\n";
+            }
+            else {
+                innerMenu(*logged);
+            }
+        }
+        else if (choice == 3) {
+            cout << "До побачення!\n";
+            break;
+        }
+        else {
+            cout << "Невірний вибір. Спробуйте ще раз.\n";
+        }
+    }
+}
+
+// ==================== MAIN ====================
+
+int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(1251);
+    SetConsoleCP(1251);
+#endif
+    initAddresses();
+    mainMenu();
+    return 0;
+}
