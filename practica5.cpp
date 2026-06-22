@@ -1,64 +1,86 @@
-﻿#include <iostream>
+#include <iostream>
 #include <cmath>
-#include <iomanip>
 
 using namespace std;
 
-double taylorSin(double x, double eps)
-{
-    double term = x;
-    double sum = x;
-    int n = 1;
-
-    while (fabs(term) > eps)
-    {
-        term *= -x * x / ((2 * n) * (2 * n + 1));
-        sum += term;
-        n++;
-    }
-
-    return sum;
-}
-
 int main()
 {
-    double x1, x2, dx, eps;
+    int n;
+    double eps;
 
-    cout << "x1 = ";
-    cin >> x1;
+    cout << "Enter system size: ";
+    cin >> n;
 
-    cout << "x2 = ";
-    cin >> x2;
-
-    cout << "dx = ";
-    cin >> dx;
-
-    cout << "epsilon = ";
+    cout << "Enter epsilon: ";
     cin >> eps;
 
-    cout << fixed << setprecision(6);
+    double** A = new double* [n];
+    for (int i = 0; i < n; i++)
+        A[i] = new double[n];
 
-    cout << "\n"
-        << setw(10) << "x"
-        << setw(15) << "Taylor"
-        << setw(15) << "sin(x)"
-        << setw(15) << "Difference"
-        << endl;
+    double* B = new double[n];
+    double* X = new double[n];
+    double* Xnew = new double[n];
 
-    for (double x = x1; x <= x2; x += dx)
+    cout << "\nEnter matrix A:\n";
+    for (int i = 0; i < n; i++)
     {
-       const double PI = 3.14159265358979323846;
-double rad = x * PI / 180.0;
-
-        double taylor = taylorSin(rad, eps);
-        double standard = sin(rad);
-
-        cout << setw(10) << x
-            << setw(15) << taylor
-            << setw(15) << standard
-            << setw(15) << fabs(taylor - standard)
-            << endl;
+        for (int j = 0; j < n; j++)
+        {
+            cout << "A[" << i + 1 << "][" << j + 1 << "] = ";
+            cin >> A[i][j];
+        }
     }
+
+    cout << "\nEnter vector B:\n";
+    for (int i = 0; i < n; i++)
+    {
+        cout << "B[" << i + 1 << "] = ";
+        cin >> B[i];
+    }
+
+    for (int i = 0; i < n; i++)
+        X[i] = 0;
+
+    bool stop;
+
+    do
+    {
+        stop = true;
+
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0;
+
+            for (int j = 0; j < n; j++)
+            {
+                if (i != j)
+                    sum += A[i][j] * X[j];
+            }
+
+            Xnew[i] = (B[i] - sum) / A[i][i];
+
+            if (fabs(Xnew[i] - X[i]) > eps)
+                stop = false;
+        }
+
+        for (int i = 0; i < n; i++)
+            X[i] = Xnew[i];
+
+    } while (!stop);
+
+    cout << "\nResult:\n";
+
+    for (int i = 0; i < n; i++)
+        cout << "x" << i + 1 << " = " << X[i] << endl;
+
+    for (int i = 0; i < n; i++)
+        delete[] A[i];
+
+    delete[] A;
+    delete[] B;
+    delete[] X;
+    delete[] Xnew;
 
     return 0;
 }
